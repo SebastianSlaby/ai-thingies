@@ -1,6 +1,9 @@
+import os
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 import chromadb
 import chromadb.utils.embedding_functions as embedding_functions
-import os
+from sentence_transformers import SentenceTransformer
 
 # 1. Setup the embedding function using the specified model
 sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
@@ -45,28 +48,28 @@ def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: f
 
 if __name__ == "__main__":
     # Example usage: Simulate a change in a Terraform variable
-    example_changed_code = """
-variable "bucket_name" {
-  description = "Name of the S3 bucket"
-  type        = string
-  default     = "my-new-test-bucket"
-}
-"""
-    query_terraform(example_changed_code)
+#     example_changed_code = """
+# variable "bucket_name" {
+#   description = "Name of the S3 bucket"
+#   type        = string
+#   default     = "my-new-test-bucket"
+# }
+# """
+#     query_terraform(example_changed_code)
 
     # Another example: Simulate a change in an S3 bucket resource
-    example_changed_code_2 = """
-resource "aws_s3_bucket" "my_app_bucket" {
-  bucket = "production-app-data"
-  acl    = "private"
+#     example_changed_code_2 = """
+# resource "aws_s3_bucket" "my_app_bucket" {
+#   bucket = "production-app-data"
+#   acl    = "private"
 
-  tags = {
-    Environment = "Production"
-    Project     = "MyApp"
-  }
-}
-"""
-    query_terraform(example_changed_code_2)
+#   tags = {
+#     Environment = "Production"
+#     Project     = "MyApp"
+#   }
+# }
+# """
+#     query_terraform(example_changed_code_2)
 
     # New example: Simulate a change in a Lambda function
     example_changed_code_3 = """

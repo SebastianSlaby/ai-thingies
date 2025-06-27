@@ -1,5 +1,7 @@
-import hcl2
 import os
+os.environ["HF_HUB_OFFLINE"] = "1"
+
+import hcl2
 import chromadb
 import chromadb.utils.embedding_functions as embedding_functions
 from sentence_transformers import SentenceTransformer
