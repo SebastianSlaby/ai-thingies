@@ -1,0 +1,3 @@
+chroma_terraform_db/
+chroma_db/
+**/.terraform/
