@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: ai-thingies
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.13
+Description-Content-Type: text/markdown
+Requires-Dist: chromadb>=1.0.13
+Requires-Dist: hcl2>=0.0.1
+Requires-Dist: sentence-transformers>=4.1.0

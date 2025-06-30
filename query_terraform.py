@@ -1,5 +1,5 @@
 import os
-os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "0"
 
 import chromadb
 import chromadb.utils.embedding_functions as embedding_functions
@@ -17,67 +17,68 @@ collection = client.get_or_create_collection(
     embedding_function=sentence_transformer_ef
 )
 
+import re
+
+def parse_resource(hcl_code):
+    match = re.search(r'resource\s+"([^"]+)"\s+"([^"]+)"', hcl_code)
+    if match:
+        return match.group(1), match.group(2)
+    return None, None
+
 # 3. Function to query for relevant Terraform files
-def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: float = 0.8):
+def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: float = 0.6):
     print(f"Searching for code similar to:\n---\n{changed_code}\n---")
+
+    query_texts = [changed_code]
+
+    # Try to parse resource type and name to find references
+    item_type, item_name = parse_resource(changed_code)
+    if item_type and item_name:
+        reference_string = f'{item_type}.{item_name}'
+        print(f"Also searching for references to: {reference_string}")
+        query_texts.append(reference_string)
+
     results = collection.query(
-        query_texts=[changed_code],
+        query_texts=query_texts,
         n_results=n_results,
         include=['documents', 'distances', 'metadatas']
     )
 
     print("\n--- Relevant Terraform Files ---")
     found_relevant = False
-    if results and results['documents']:
-        for i in range(len(results['documents'][0])):
-            doc = results['documents'][0][i]
-            metadata = results['metadatas'][0][i]
-            distance = results['distances'][0][i]
-            file_path = metadata.get('file_path', 'N/A')
+    processed_docs = set()
 
-            if distance <= distance_threshold:
-                found_relevant = True
-                print(f"\nFile: {file_path}")
-                print(f"Distance: {distance:.4f}")
-                print("Content:\n")
-                print(doc)
-                print("----------------------------------")
+    if results and results['documents']:
+        for i in range(len(results['documents'])):
+            for j in range(len(results['documents'][i])):
+                doc = results['documents'][i][j]
+                metadata = results['metadatas'][i][j]
+                distance = results['distances'][i][j]
+                file_path = metadata.get('file_path', 'N/A')
+
+                if doc in processed_docs:
+                    continue
+
+                if distance <= distance_threshold:
+                    found_relevant = True
+                    print(f"\nFile: {file_path}")
+                    print(f"Distance: {distance:.4f}")
+                    print("Content:\n")
+                    print(doc)
+                    print("----------------------------------")
+                    processed_docs.add(doc)
     
     if not found_relevant:
         print("No relevant files found within the specified distance threshold.")
 
 if __name__ == "__main__":
-    # Example usage: Simulate a change in a Terraform variable
-#     example_changed_code = """
-# variable "bucket_name" {
-#   description = "Name of the S3 bucket"
-#   type        = string
-#   default     = "my-new-test-bucket"
-# }
-# """
-#     query_terraform(example_changed_code)
-
-    # Another example: Simulate a change in an S3 bucket resource
-#     example_changed_code_2 = """
-# resource "aws_s3_bucket" "my_app_bucket" {
-#   bucket = "production-app-data"
-#   acl    = "private"
-
-#   tags = {
-#     Environment = "Production"
-#     Project     = "MyApp"
-#   }
-# }
-# """
-#     query_terraform(example_changed_code_2)
-
-    # New example: Simulate a change in a Lambda function
-    example_changed_code_3 = """
-resource "aws_lambda_function" "my_lambda" {
-  function_name = "my-example-lambda-updated"
+    # Example usage: Simulate a change in a Lambda function
+    example_changed_code = """
+resource "aws_lambda_function" "another_lambda" {
+  function_name = "another-example-lambda-updated"
   handler       = "index.handler"
-  runtime       = "nodejs20.x"
-  timeout       = 60
+  runtime       = "python3.9"
+  filename      = "another_lambda_payload.zip"
 }
 """
-    query_terraform(example_changed_code_3)
+    query_terraform(example_changed_code)

@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+setup.py
+ai_thingies.egg-info/PKG-INFO
+ai_thingies.egg-info/SOURCES.txt
+ai_thingies.egg-info/dependency_links.txt
+ai_thingies.egg-info/requires.txt
+ai_thingies.egg-info/top_level.txt
