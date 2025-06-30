@@ -29,44 +29,63 @@ def parse_resource(hcl_code):
 def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: float = 0.6):
     print(f"Searching for code similar to:\n---\n{changed_code}\n---")
 
-    query_texts = [changed_code]
+    all_relevant_docs = {}
 
-    # Try to parse resource type and name to find references
+    # Query for the changed code itself
+    changed_code_results = collection.query(
+        query_texts=[changed_code],
+        n_results=1,
+        include=['documents', 'distances', 'metadatas']
+    )
+
+    if changed_code_results and changed_code_results['documents'] and changed_code_results['documents'][0]:
+        doc = changed_code_results['documents'][0][0]
+        metadata = changed_code_results['metadatas'][0][0]
+        distance = changed_code_results['distances'][0][0]
+        if distance < 0.1: # Very low distance for an almost exact match
+            all_relevant_docs[doc] = {'metadata': metadata, 'distance': distance}
+
+
+    # Query for references
     item_type, item_name = parse_resource(changed_code)
     if item_type and item_name:
         reference_string = f'{item_type}.{item_name}'
         print(f"Also searching for references to: {reference_string}")
-        query_texts.append(reference_string)
 
-    results = collection.query(
-        query_texts=query_texts,
-        n_results=n_results,
-        include=['documents', 'distances', 'metadatas']
-    )
+        reference_results = collection.query(
+            query_texts=[reference_string],
+            n_results=n_results,
+            include=['documents', 'distances', 'metadatas']
+        )
+
+        if reference_results and reference_results['documents']:
+            for i in range(len(reference_results['documents'][0])):
+                doc = reference_results['documents'][0][i]
+                metadata = reference_results['metadatas'][0][i]
+                distance = reference_results['distances'][0][i]
+
+                if distance <= distance_threshold:
+                    all_relevant_docs[doc] = {'metadata': metadata, 'distance': distance}
 
     print("\n--- Relevant Terraform Files ---")
     found_relevant = False
-    processed_docs = set()
 
-    if results and results['documents']:
-        for i in range(len(results['documents'])):
-            for j in range(len(results['documents'][i])):
-                doc = results['documents'][i][j]
-                metadata = results['metadatas'][i][j]
-                distance = results['distances'][i][j]
-                file_path = metadata.get('file_path', 'N/A')
+    # Sort the results by distance
+    sorted_docs = sorted(all_relevant_docs.items(), key=lambda item: item[1]['distance'])
 
-                if doc in processed_docs:
-                    continue
+    if sorted_docs:
+        for doc, info in sorted_docs:
+            found_relevant = True
+            file_path = info['metadata'].get('file_path', 'N/A')
+            distance = info['distance']
+            print(f"\nFile: {file_path}")
+            print(f"Distance: {distance:.4f}")
+            print("Content:\n")
+            print(doc)
+            print("----------------------------------")
 
-                if distance <= distance_threshold:
-                    found_relevant = True
-                    print(f"\nFile: {file_path}")
-                    print(f"Distance: {distance:.4f}")
-                    print("Content:\n")
-                    print(doc)
-                    print("----------------------------------")
-                    processed_docs.add(doc)
+    if not found_relevant:
+        print("No relevant files found within the specified distance threshold.")
     
     if not found_relevant:
         print("No relevant files found within the specified distance threshold.")
