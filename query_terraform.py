@@ -49,23 +49,34 @@ def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: f
 
     all_relevant_docs = {}
 
-    # Query for the changed code itself
-    changed_code_results = collection.query(
-        query_texts=[changed_code],
-        n_results=1,
-        include=['documents', 'distances', 'metadatas']
-    )
+    if current_depth == 0:
+        # Search for the exact changed_code
+        exact_match_results = collection.query(
+            query_texts=[changed_code],
+            n_results=1, # We only care about the top result
+            include=['documents', 'distances', 'metadatas']
+        )
 
-    if changed_code_results and changed_code_results['documents'] and changed_code_results['documents'][0]:
-        doc = changed_code_results['documents'][0][0]
-        metadata = changed_code_results['metadatas'][0][0]
-        distance = changed_code_results['distances'][0][0]
-        if distance < 0.1 and doc not in processed_docs: # Very low distance for an almost exact match
-            all_relevant_docs[doc] = {'metadata': metadata, 'distance': distance, 'depth': current_depth}
-            processed_docs.add(doc)
+        if exact_match_results and exact_match_results['documents'] and exact_match_results['documents'][0]:
+            doc = exact_match_results['documents'][0][0]
+            metadata = exact_match_results['metadatas'][0][0]
+            distance = exact_match_results['distances'][0][0]
 
+            # Verify that the returned document is indeed the changed_code itself
+            if doc.strip() == changed_code.strip():
+                all_relevant_docs[doc] = {'metadata': metadata, 'distance': distance, 'depth': current_depth}
+                processed_docs.add(doc)
+            else:
+                # If the exact changed_code is not the top result, or not found,
+                # then we cannot proceed with impact analysis from this starting point.
+                print("Error: The provided changed_code could not be precisely identified in the database.")
+                return {}
+        else:
+            # If no results are returned for the changed_code, then we cannot proceed.
+            print("Error: No results found for the provided changed_code in the database.")
+            return {}
 
-    # Query for references
+    # Query for references (this block runs for all depths, including depth 0 after initial match)
     resource_identifier = parse_block_identifier(changed_code)
     if resource_identifier:
         print(f"Also searching for references to: {resource_identifier}")
@@ -82,14 +93,16 @@ def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: f
                 metadata = reference_results['metadatas'][0][i]
                 distance = reference_results['distances'][0][i]
 
-                if distance <= distance_threshold and doc not in processed_docs:
-                    all_relevant_docs[doc] = {'metadata': metadata, 'distance': distance, 'depth': current_depth}
-                    processed_docs.add(doc)
+                if distance <= distance_threshold and doc not in processed_docs and 'reference' in metadata:
+                    # Add the full content of the referencing block
+                    referencing_block_content = metadata.get('full_content', doc) # Use doc as fallback if full_content is missing
+                    if referencing_block_content not in processed_docs:
+                        all_relevant_docs[referencing_block_content] = {'metadata': metadata, 'distance': distance, 'depth': current_depth}
+                        processed_docs.add(referencing_block_content)
 
-                    # Recursively search for references in the referencing block
-                    if 'full_content' in metadata:
+                        # Recursively search for references in the referencing block
                         indirect_results = query_terraform(
-                            changed_code=metadata['full_content'],
+                            changed_code=referencing_block_content,
                             n_results=n_results,
                             distance_threshold=distance_threshold,
                             current_depth=current_depth + 1,
@@ -104,10 +117,10 @@ def main():
     # Example usage: Simulate a change in a Lambda function
     example_changed_code = """
 resource "aws_lambda_function" "another_lambda" {
-  function_name = "another-example-lambda-updated"
-  handler       = "index.handler"
-  runtime       = "python3.9"
-  filename      = "another_lambda_payload.zip"
+  "function_name": "another-example-lambda",
+  "handler": "index.handler",
+  "runtime": "python3.9",
+  "filename": "another_lambda_payload.zip"
 }
 """
     all_relevant_docs = query_terraform(example_changed_code)
