@@ -79,52 +79,59 @@ def main():
                         # Most other blocks are dictionaries with a single key which is the name
                         # or type of the block
                         for key, value in block.items():
-                            # resource, data, and module blocks have an extra level for the type
-                            if block_type in ['resource', 'data', 'module']:
-                                item_type = key
-                                for item_name, config in value.items():
-                                    document = f"{block_type} \"{item_type}\" \"{item_name}\" {json.dumps(config, indent=2)}"
-                                    documents.append(document)
-                                    metadatas.append({
-                                        "file_path": relative_path,
-                                        "block_type": block_type,
-                                        "item_type": item_type,
-                                        "item_name": item_name
-                                    })
-                                    ids.append(f"doc_{doc_id_counter}")
-                                    doc_id_counter += 1
+                            document = ""
+                            item_type = None
+                            item_name = ""
+                            config = {}
 
-                                    # Create additional documents for references
-                                    if isinstance(config, dict):
-                                        for _, val in config.items():
-                                            if isinstance(val, str) and "." in val:
-                                                # A simple way to find references
-                                                # This could be improved with more robust parsing
-                                                references = re.findall(r'\${([\w\._-]+)}', val)
-                                                for ref in references:
-                                                    documents.append(ref)
-                                                    metadatas.append({
-                                                        "file_path": relative_path,
-                                                        "block_type": block_type,
-                                                        "item_type": item_type,
-                                                        "item_name": item_name,
-                                                        "reference": ref
-                                                    })
-                                                    ids.append(f"doc_{doc_id_counter}")
-                                                    doc_id_counter += 1
-                            # variables, outputs, and providers have a simpler structure
+                            # resource and data blocks have two levels of keys (type and name)
+                            if block_type in ['resource', 'data']:
+                                item_type = key
+                                if value:
+                                    item_name, config = list(value.items())[0]
+                                else:
+                                    item_name, config = "", {}
+                                document = f'{block_type} "{item_type}" "{item_name}" {json.dumps(config, indent=2)}'
+                            # module, variable, output, etc. have one level of key (name)
                             else:
                                 item_name = key
                                 config = value
-                                document = f"{block_type} \"{item_name}\" {json.dumps(config, indent=2)}"
-                                documents.append(document)
-                                metadatas.append({
-                                    "file_path": relative_path,
-                                    "block_type": block_type,
-                                    "item_name": item_name
-                                })
-                                ids.append(f"doc_{doc_id_counter}")
-                                doc_id_counter += 1
+                                document = f'{block_type} "{item_name}" {json.dumps(config, indent=2)}'
+
+                            # Add the main block document
+                            metadata = {
+                                "file_path": relative_path,
+                                "block_type": block_type,
+                                "item_name": item_name,
+                            }
+                            if item_type:
+                                metadata["item_type"] = item_type
+                            
+                            documents.append(document)
+                            metadatas.append(metadata)
+                            ids.append(f"doc_{doc_id_counter}")
+                            doc_id_counter += 1
+
+                            # Create additional documents for references for ALL block types
+                            if isinstance(config, dict):
+                                for _, val in config.items():
+                                    if isinstance(val, str) and "." in val:
+                                        references = re.findall(r'\${([\w\._-]+)}', val)
+                                        for ref in references:
+                                            documents.append(ref)
+                                            ref_metadata = {
+                                                "file_path": relative_path,
+                                                "reference": ref,
+                                                "referencing_block_type": block_type,
+                                                "referencing_item_name": item_name,
+                                                "full_content": document
+                                            }
+                                            if item_type:
+                                                ref_metadata["referencing_item_type"] = item_type
+                                            
+                                            metadatas.append(ref_metadata)
+                                            ids.append(f"doc_{doc_id_counter}")
+                                            doc_id_counter += 1
             except Exception as e:
                 print(f"Could not process file {file_path}: {e}")
 

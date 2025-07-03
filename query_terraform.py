@@ -76,16 +76,23 @@ def query_terraform(changed_code: str, n_results: int = 5, distance_threshold: f
     if sorted_docs:
         for doc, info in sorted_docs:
             found_relevant = True
-            file_path = info['metadata'].get('file_path', 'N/A')
+            metadata = info['metadata']
+            file_path = metadata.get('file_path', 'N/A')
             distance = info['distance']
+            
             print(f"\nFile: {file_path}")
             print(f"Distance: {distance:.4f}")
-            print("Content:\n")
-            print(doc)
-            print("----------------------------------")
 
-    if not found_relevant:
-        print("No relevant files found within the specified distance threshold.")
+            # If the document is a reference, print the full content of the referencing block
+            if 'reference' in metadata:
+                print(f"Reference: {metadata['reference']}")
+                print("Full Content of Referencing Block:\n")
+                print(metadata.get('full_content', 'N/A'))
+            else:
+                print("Content:\n")
+                print(doc)
+            
+            print("----------------------------------")
     
     if not found_relevant:
         print("No relevant files found within the specified distance threshold.")
